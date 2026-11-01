@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: emas
+      MYSQL_USER: emas
+      MYSQL_PASSWORD: emas
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run migrate && npm run dev"
+    environment:
+      DATABASE_URL: mysql://emas:emas@mysql:3306/emas
+      JWT_SECRET: dev-only-secret-change-me-please-32chars
+      SEED_ADMIN_EMAIL: admin@emas.local
+      SEED_ADMIN_PASSWORD: password
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - ./apps/api:/app
+      - api-node-modules:/app/node_modules
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NUXT_API_URL: http://api:4000
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./apps/web:/app
+      - web-node-modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  mysql-data:
+  api-node-modules:
+  web-node-modules:
