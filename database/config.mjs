@@ -5,13 +5,10 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 
 export function connectionFromEnv(env = process.env) {
-  if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set')
-  // A raw '#', '?' or '/' in the password ends the host part early, so the user name gets parsed as the host.
-  const credentials = env.DATABASE_URL.match(/^[a-z0-9+]+:\/\/(.*)@/i)?.[1] ?? ''
-  if (/[#?/]/.test(credentials)) {
-    throw new Error("DATABASE_URL credentials contain '#', '?' or '/'. URL-encode the password (encodeURIComponent).")
-  }
-  const url = new URL(env.DATABASE_URL)
+  // Tolerate stray whitespace or quotes pasted into a dashboard.
+  const raw = (env.DATABASE_URL ?? '').trim().replace(/^(['"])(.*)\1$/, '$2')
+  if (!raw) throw new Error('DATABASE_URL is not set')
+  const url = parseDatabaseUrl(raw)
   const ssl = url.searchParams.get('ssl')
   return {
     host: url.hostname,
@@ -25,6 +22,28 @@ export function connectionFromEnv(env = process.env) {
     decimalNumbers: true,
     charset: 'utf8mb4',
   }
+}
+
+// Never echo the value: it holds the password.
+function parseDatabaseUrl(raw) {
+  const fail = (why) => {
+    throw new Error(`DATABASE_URL is invalid: ${why}. Expected mysql://user:password@host:port/database?ssl=true`)
+  }
+  if (!/^mysql:\/\//i.test(raw)) fail("it must start with 'mysql://'")
+  if (/\s/.test(raw)) fail('it contains whitespace')
+  // A raw '#', '?' or '/' in the password ends the host part early, so the user name gets parsed as the host.
+  const credentials = raw.match(/^mysql:\/\/(.*)@/i)?.[1] ?? ''
+  if (/[#?/]/.test(credentials)) fail("the user or password contains '#', '?' or '/'; URL-encode it (encodeURIComponent)")
+  if (/%(?![0-9a-f]{2})/i.test(credentials)) fail("the password contains a '%' that isn't part of an encoding; URL-encode it")
+  let url
+  try {
+    url = new URL(raw)
+  } catch {
+    fail('it could not be parsed; URL-encode the user and password (encodeURIComponent)')
+  }
+  if (!url.hostname) fail('the host is missing')
+  if (!url.pathname.replace(/^\//, '')) fail('the database name is missing')
+  return url
 }
 
 export function knexConfig(env = process.env) {
