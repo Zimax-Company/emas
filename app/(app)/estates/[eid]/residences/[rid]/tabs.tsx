@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { apiCall, useAction } from '@/lib/client'
 import { date, money, toMinor } from '@/lib/format'
-import type { Contact, InboxMessage, Residence, ResidenceLedger } from '@/lib/types'
+import type { Contact, InboxMessage, Residence, ResidenceLedger, VisitorPass } from '@/lib/types'
 import { FormError } from '@/components/FormError'
+import { VisitorStatus } from '@/components/VisitorStatus'
 
 const divider = { borderTop: '1px solid var(--border)' }
 
@@ -301,6 +302,133 @@ export function AccountTab({ apiPath, ledger, currency, canManage }: { apiPath: 
             </table>
           ) : (
             <div className="empty">No transactions yet.</div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+const VALIDITY = [[2, '2 hours'], [6, '6 hours'], [12, '12 hours'], [24, '1 day'], [48, '2 days'], [72, '3 days'], [168, '1 week']] as const
+
+function shareText(p: VisitorPass) {
+  return `Visitor pass for ${p.visitor_name} (${p.residence_name})\nIN code: ${p.entry_code}\nOUT code: ${p.exit_code}\nValid ${date(p.valid_from, true)} – ${date(p.expires_at, true)}. Each code works once.`
+}
+
+export function VisitorsTab({ apiPath, passes, canIssue }: { apiPath: string; passes: VisitorPass[]; canIssue: boolean }) {
+  const blank = { visitor_name: '', visitor_phone: '', purpose: '', valid_from: '', valid_hours: '24' }
+  const [form, setForm] = useState(blank)
+  const [issued, setIssued] = useState<VisitorPass | null>(null)
+  const [copied, setCopied] = useState(false)
+  const { pending, error, run } = useAction()
+  const field = (k: keyof typeof blank) => ({ value: form[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value }) })
+
+  async function issue(e: React.FormEvent) {
+    e.preventDefault()
+    await run(async () => {
+      const pass = await apiCall<VisitorPass>('POST', `${apiPath}/visitors`, {
+        visitor_name: form.visitor_name,
+        visitor_phone: form.visitor_phone || null,
+        purpose: form.purpose || null,
+        valid_hours: Number(form.valid_hours),
+        // datetime-local is in the browser's time zone; send an absolute time.
+        ...(form.valid_from ? { valid_from: new Date(form.valid_from).toISOString() } : {}),
+      })
+      setIssued(pass)
+      setCopied(false)
+      setForm(blank)
+    })
+  }
+
+  async function copy(p: VisitorPass) {
+    try {
+      await navigator.clipboard.writeText(shareText(p))
+      setCopied(true)
+    } catch {
+      prompt('Copy the visitor codes:', shareText(p))
+    }
+  }
+
+  const cancel = (p: VisitorPass) => confirm(`Cancel the pass for ${p.visitor_name}? Both codes will stop working.`) && run(() => apiCall('DELETE', `${apiPath}/visitors/${p.id}`))
+
+  return (
+    <>
+      {canIssue && (
+        <form className="card card-body form" onSubmit={issue}>
+          <h2>Generate visitor codes</h2>
+          <p className="small muted">Your visitor gets an IN code for the gate on arrival and an OUT code for when they leave. Each code works only once.</p>
+          <FormError error={error} />
+          <div className="form-grid">
+            <label>Visitor name <input required {...field('visitor_name')} /></label>
+            <label>Phone <input {...field('visitor_phone')} /></label>
+            <label>Purpose <input placeholder="e.g. Family visit, delivery" {...field('purpose')} /></label>
+          </div>
+          <div className="form-grid">
+            <label>Valid from <input type="datetime-local" {...field('valid_from')} /><span className="small muted">Leave empty for now</span></label>
+            <label>
+              Valid for
+              <select {...field('valid_hours')}>
+                {VALIDITY.map(([h, label]) => <option key={h} value={h}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="actions"><button className="btn primary" disabled={pending}>Generate codes</button></div>
+        </form>
+      )}
+
+      {issued && (
+        <div className="alert success">
+          <div className="row between">
+            <div>
+              Codes for <strong>{issued.visitor_name}</strong>: IN <span className="code">{issued.entry_code}</span> · OUT <span className="code">{issued.exit_code}</span>
+              <div className="small">Valid until {date(issued.expires_at, true)}. Share them with your visitor.</div>
+            </div>
+            <button type="button" className="btn sm" onClick={() => copy(issued)}>{copied ? 'Copied' : 'Copy'}</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-head"><h2>Visitor passes</h2></div>
+        <div className="table-wrap">
+          {passes.length ? (
+            <table>
+              <thead><tr><th>Visitor</th><th>Valid</th><th>Codes</th><th>Status</th><th>Gate</th><th /></tr></thead>
+              <tbody>
+                {passes.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      {p.visitor_name}
+                      <div className="small muted">{[p.visitor_phone, p.purpose].filter(Boolean).join(' · ') || '—'}</div>
+                    </td>
+                    <td className="small">{date(p.valid_from, true)}<div className="muted">to {date(p.expires_at, true)}</div></td>
+                    <td>
+                      {p.entry_code ? (
+                        <>
+                          <div><span className="small muted">IN </span><span className={`code${p.checked_in_at || p.status === 'cancelled' || p.status === 'expired' ? ' used' : ''}`}>{p.entry_code}</span></div>
+                          <div><span className="small muted">OUT </span><span className={`code${p.checked_out_at || p.status === 'cancelled' || p.status === 'expired' ? ' used' : ''}`}>{p.exit_code}</span></div>
+                        </>
+                      ) : <span className="muted">Hidden</span>}
+                    </td>
+                    <td><VisitorStatus status={p.status} /></td>
+                    <td className="small">
+                      {p.checked_in_at ? <>In {date(p.checked_in_at, true)}</> : '—'}
+                      {p.checked_out_at && <div>Out {date(p.checked_out_at, true)}</div>}
+                    </td>
+                    <td className="actions">
+                      {canIssue && p.entry_code && (p.status === 'active' || p.status === 'upcoming') && (
+                        <>
+                          <button className="btn sm" onClick={() => copy(p)}>Copy</button>
+                          <button className="btn sm danger" onClick={() => cancel(p)}>Cancel</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty">No visitor passes yet.</div>
           )}
         </div>
       </div>

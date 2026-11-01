@@ -10,16 +10,24 @@ A multi-tenant estate management platform driven by roles and permissions. It is
   - **System admin** (`users.is_system_admin`): every permission, in every estate. Creates estates and manages all users.
   - **Estate Admin**: a default role in each estate with root access to that estate. It is locked and always holds every permission. Estate admins create roles and grant permissions.
   - **Resident**: a default role in each estate. Residents see their own residence's inbox and account.
-  - **Custom roles** per estate (Treasurer, Security…), built from 16 permissions (see `lib/permissions.ts`). A user can hold several roles in an estate and belong to several estates.
+  - **Custom roles** per estate (Treasurer, Security…), built from 19 permissions (see `lib/permissions.ts`). A user can hold several roles in an estate and belong to several estates.
 - **Estates.** Each estate has its own dashboard. A user who belongs to several estates switches between dashboards from the top bar.
 - **Residences.** Each residence has a name, an address and contacts (owner, tenant, emergency…, with one marked primary). User accounts are linked to residences as residents.
 - **Residence inbox.** Admins publish announcements to all residences or to selected ones. Each residence gets an inbox entry, and the system tracks who has read it.
 - **Residence account.** A ledger of charges, payments and credits, with a running balance.
 - **Dues.** One-time, monthly, quarterly or yearly. Charging a due posts it to each residence account once per billing period; running it again skips residences already charged.
 - **Estate account.** Income and expenses with categories, filters and a running balance. A payment recorded on a residence account also appears automatically as estate income.
+- **Visitor access codes.** A resident creates a visitor pass for their residence and gets a 6-digit **IN** code and a 6-digit **OUT** code to share with the visitor. Gate staff with the `visitors.validate` permission enter the code on the **Gate** page.
+  - Each code works exactly once, including when two gates submit the same code at the same moment.
+  - The IN code only works inside the pass's validity window (up to a week, optionally starting later).
+  - The OUT code only works after check-in. It never expires, so a visitor who overstays can still leave.
+  - A pass can be cancelled until the visitor checks in.
+  - The Gate page shows who is expected, who is inside now, and recent activity.
+  - Codes are only shown to the residence's residents and holders of `visitors.manage`, never in the gate log.
 
 ### Guard rails
 - A non-admin with `roles.manage` can only grant permissions they hold themselves, and only admins can assign the admin role.
+- Gate staff can validate codes but never see them; a code must be typed in to be used.
 - An estate always keeps at least one estate admin. Default roles cannot be deleted, and the admin role cannot be edited.
 - Tenancy is isolated: every estate-scoped query is filtered by `estate_id`. Non-members get a 404 for estates they don't belong to.
 
@@ -84,7 +92,7 @@ npm run smoke            # host, against http://localhost:3000 (override with AP
 npm run docker:smoke     # inside the container
 ```
 
-This runs 34 end-to-end checks covering estate creation, default roles, residences, the inbox, dues, both ledgers, custom roles, privilege escalation and cross-estate isolation.
+This runs 48 end-to-end checks covering estate creation, default roles, residences, the inbox, dues, both ledgers, visitor codes, custom roles, privilege escalation and cross-estate isolation.
 
 ## Deploying to Vercel
 
@@ -137,5 +145,8 @@ GET|POST          /residences/:rid/transactions
 GET|POST          /api/estates/:eid/announcements    DELETE /announcements/:aid
 GET|POST          /api/estates/:eid/dues             PATCH|DELETE /dues/:did   POST /dues/:did/charge
 GET|POST          /api/estates/:eid/account          DELETE /account/:tid
+GET|POST          /residences/:rid/visitors          DELETE /visitors/:vid (cancel)
+GET               /api/estates/:eid/visitors?status=expected|inside|recent
+POST              /api/estates/:eid/visitors/validate { code }
 GET|POST          /api/users (sysadmin)              PATCH /users/:uid
 ```

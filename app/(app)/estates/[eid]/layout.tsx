@@ -22,6 +22,7 @@ export default async function EstateLayout({ children, params }: { children: Rea
           {can(e, 'announcements.view') && <NavLink href={`${base}/announcements`}>Announcements</NavLink>}
           {can(e, 'dues.view') && <NavLink href={`${base}/dues`}>Dues</NavLink>}
           {can(e, 'estate_accounts.view') && <NavLink href={`${base}/account`}>Estate account</NavLink>}
+          {(can(e, 'visitors.validate') || can(e, 'visitors.view')) && <NavLink href={`${base}/gate`}>Gate</NavLink>}
           {admin && <div className="section">Administration</div>}
           {can(e, 'members.view') && <NavLink href={`${base}/members`}>Members</NavLink>}
           {can(e, 'roles.view') && <NavLink href={`${base}/roles`}>Roles &amp; permissions</NavLink>}

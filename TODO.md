@@ -28,3 +28,10 @@
 - [x] 23. Pages: announcements, dues, estate account, members, roles, settings
 - [x] 24. Move app to repo root, single docker-compose service, single vercel.json, remove apps/web
 - [x] 25. Verified: typecheck, prod build, 34/34 smoke (Docker + prod), all pages SSR, 12/12 headless-Chrome UI flows (no hydration errors); README updated
+
+## Phase 3 — visitor access codes
+
+- [x] 26. Migration: visitor_passes + visitor_codes (live-code uniqueness per estate), visitors.view / visitors.manage / visitors.validate permissions
+- [x] 27. API: residents issue / list / cancel passes; gate validates single-use IN then OUT codes (row lock, expiry window, no code reuse)
+- [x] 28. UI: residence Visitors tab (generate, copy, cancel), estate Gate page (validate, expected / inside / recent)
+- [x] 29. Verified: 48/48 smoke, concurrent-use test (1 of 10 succeeds), expiry + overstay checks, headless-Chrome flow, prod build; README updated

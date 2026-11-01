@@ -2,10 +2,11 @@ import Link from 'next/link'
 import { GET as getResidence } from '@/app/api/estates/[eid]/residences/[rid]/route'
 import { GET as getInbox } from '@/app/api/estates/[eid]/residences/[rid]/inbox/route'
 import { GET as getLedger } from '@/app/api/estates/[eid]/residences/[rid]/transactions/route'
+import { GET as getVisitors } from '@/app/api/estates/[eid]/residences/[rid]/visitors/route'
 import { can, getEstate, load, param, type SearchParams } from '@/lib/server'
 import { money } from '@/lib/format'
-import type { InboxMessage, Residence, ResidenceLedger } from '@/lib/types'
-import { AccountTab, InboxTab, OverviewTab } from './tabs'
+import type { InboxMessage, Residence, ResidenceLedger, VisitorPass } from '@/lib/types'
+import { AccountTab, InboxTab, OverviewTab, VisitorsTab } from './tabs'
 
 type P = { params: Promise<{ eid: string; rid: string }>; searchParams: SearchParams }
 
@@ -21,9 +22,12 @@ export default async function ResidencePage({ params, searchParams }: P) {
   const [e, r] = await Promise.all([getEstate(p.eid), load<Residence, typeof p>(getResidence, p)])
   const canSeeInbox = r.access.is_resident || can(e, 'announcements.view')
   const canSeeAccount = r.account !== null
-  const [inbox, ledger] = await Promise.all([
+  const canIssueVisitors = r.access.is_resident || can(e, 'visitors.manage')
+  const canSeeVisitors = canIssueVisitors || can(e, 'visitors.view')
+  const [inbox, ledger, visitors] = await Promise.all([
     tab === 'inbox' && canSeeInbox ? load<InboxMessage[], typeof p>(getInbox, p) : null,
     tab === 'account' && canSeeAccount ? load<ResidenceLedger, typeof p>(getLedger, p) : null,
+    tab === 'visitors' && canSeeVisitors ? load<VisitorPass[], typeof p>(getVisitors, p) : null,
   ])
   const base = `/estates/${p.eid}`
   const path = `${base}/residences/${p.rid}`
@@ -55,10 +59,15 @@ export default async function ResidencePage({ params, searchParams }: P) {
         {canSeeAccount && (
           <Link href={`${path}?tab=account`} className={tab === 'account' ? 'active' : undefined}>Account</Link>
         )}
+        {canSeeVisitors && (
+          <Link href={`${path}?tab=visitors`} className={tab === 'visitors' ? 'active' : undefined}>Visitors</Link>
+        )}
       </nav>
 
       {tab === 'inbox' && inbox ? (
         <InboxTab apiPath={path} messages={inbox} isResident={r.access.is_resident} />
+      ) : tab === 'visitors' && visitors ? (
+        <VisitorsTab apiPath={path} passes={visitors} canIssue={canIssueVisitors} />
       ) : tab === 'account' && ledger ? (
         <AccountTab apiPath={path} ledger={ledger} currency={currency} canManage={r.access.can_manage_account} />
       ) : (

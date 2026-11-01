@@ -90,3 +90,15 @@ export type PermissionDef = { key: string; group: string; label: string }
 export type AdminUser = {
   id: number; name: string; email: string; phone: string | null; is_system_admin: boolean; is_active: boolean; last_login_at: string | null
 }
+
+export type VisitorPassStatus = 'cancelled' | 'completed' | 'inside' | 'expired' | 'upcoming' | 'active'
+
+export type VisitorPass = {
+  id: number; residence_id: number; residence_name: string; visitor_name: string; visitor_phone: string | null; purpose: string | null
+  valid_from: string; expires_at: string; checked_in_at: string | null; checked_out_at: string | null; cancelled_at: string | null
+  created_at: string; created_by_name: string | null; checked_in_by_name: string | null; checked_out_by_name: string | null
+  status: VisitorPassStatus
+  /** Only present for residents of the residence and holders of visitors.manage */
+  entry_code: string | null
+  exit_code: string | null
+}

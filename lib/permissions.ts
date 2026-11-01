@@ -16,6 +16,9 @@ export const PERMISSIONS = [
   'residence_accounts.manage',
   'estate_accounts.view',
   'estate_accounts.manage',
+  'visitors.view',
+  'visitors.manage',
+  'visitors.validate',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
