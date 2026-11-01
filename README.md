@@ -1,12 +1,8 @@
 # EMAS — Estate Management System
 
-A multi-tenant estate management platform driven by roles and permissions.
+A multi-tenant estate management platform driven by roles and permissions. It is a single Next.js project: server-rendered React pages and a JSON API, backed by MySQL.
 
-| Part | Path | Stack |
-| --- | --- | --- |
-| API | [`apps/api`](apps/api) | Node 24, Next.js 16 route handlers, Knex + MySQL, JWT (jose), Zod |
-| Web | [`apps/web`](apps/web) | Node 24, Nuxt 4 (Vue 3), server-side rendered |
-| DB | MySQL 8 | Laravel-style migrations that run on every production deploy |
+**Stack:** Node 24 · Next.js 16 (App Router, React 19) · MySQL 8 with Knex · JWT (jose) · Zod. Migrations are Laravel-style and run on every production deploy.
 
 ## Features
 
@@ -27,36 +23,44 @@ A multi-tenant estate management platform driven by roles and permissions.
 - An estate always keeps at least one estate admin. Default roles cannot be deleted, and the admin role cannot be edited.
 - Tenancy is isolated: every estate-scoped query is filtered by `estate_id`. Non-members get a 404 for estates they don't belong to.
 
-## Architecture
+## How it fits together
 
 ```
-Browser ──► Nuxt (SSR, apps/web) ──/api/proxy/*──► Next.js API (apps/api) ──► MySQL
-            httpOnly cookie holds JWT     adds Authorization: Bearer
+app/
+  api/…                 JSON API (route handlers). All business rules and permission checks live here.
+  (app)/…               Signed-in pages (server components) and their small client components for forms
+  login/                Sign-in page
+lib/                    db, auth, rbac, ledger, server-side loader, client fetch helpers, shared types
+database/migrations/    Laravel-style migrations     database/seeds/   seeders
+scripts/artisan.mjs     migration CLI                scripts/smoke.mjs end-to-end API checks
 ```
 
-Nuxt renders pages on the server. The JWT is stored in an httpOnly cookie, and requests reach the API through `server/api/proxy/[...path].ts`, so browser JavaScript never sees the token.
+- **Pages are server-rendered.** A page loads its data by calling the API route handlers in-process (`lib/server.ts`), so pages and the public API share the same validation and permission checks.
+- **Forms are client components.** They call `/api/*`, then refresh the page so the server re-renders it with fresh data.
+- **Authentication.** Logging in sets an httpOnly `emas_token` cookie for the web UI and also returns the token in the response body for other clients, such as a future mobile app, which send `Authorization: Bearer <token>`. Cookie-authenticated writes must come from the same origin.
 
 ## Run locally with Docker
 
 ```bash
-npm run up          # mysql (:3307), api (:4000), web (:3000) on node:24-alpine
-npm run migrate     # runs automatically on api start too
-npm run seed        # creates admin@emas.local / password
+npm run docker:up      # mysql (:3307) + app (:3000) on node:24-alpine; migrates on start
+npm run docker:seed    # creates admin@emas.local / password
 open http://localhost:3000
 ```
 
-### Without Docker for the apps
-Run only MySQL in Docker and the apps on the host:
+If port 3000 is taken, run `APP_PORT=3001 npm run docker:up`.
+
+### Without Docker for the app
+Run only MySQL in Docker and the app on the host:
 
 ```bash
 docker compose up -d mysql
-cd apps/api && cp .env.example .env && npm install && npm run migrate && npm run db:seed && npm run dev
-cd apps/web && cp .env.example .env && npm install && npm run dev
+cp .env.example .env
+npm install && npm run migrate && npm run db:seed && npm run dev
 ```
 
 ## Migrations (Laravel-style)
 
-Migrations live in `apps/api/database/migrations/` as `YYYY_MM_DD_HHMMSS_name.mjs` files with `up`/`down` functions. They are tracked in a `migrations` table by batch.
+Migrations live in `database/migrations/` as `YYYY_MM_DD_HHMMSS_name.mjs` files with `up`/`down` functions. They are tracked in a `migrations` table by batch.
 
 ```bash
 npm run make:migration -- add_gate_codes_table
@@ -73,26 +77,33 @@ To add a permission, write a new migration that inserts it into `permissions`, t
 
 ## Smoke test
 
-With the API running and seeded:
+With the app running and seeded:
 
 ```bash
-cd apps/api && npm run smoke
+npm run smoke            # host, against http://localhost:3000 (override with APP_URL)
+npm run docker:smoke     # inside the container
 ```
 
 This runs 34 end-to-end checks covering estate creation, default roles, residences, the inbox, dues, both ledgers, custom roles, privilege escalation and cross-estate isolation.
 
 ## Deploying to Vercel
 
-Create **two Vercel projects** from this repo:
+The whole app is **one Vercel project**.
 
-| Project | Root directory | Env vars |
-| --- | --- | --- |
-| `emas-api` | `apps/api` | `DATABASE_URL` (add `?ssl=true` for hosted MySQL), `JWT_SECRET` (32+ chars), optional `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` |
-| `emas-web` | `apps/web` | `NUXT_API_URL=https://<emas-api domain>` |
+1. Get a managed MySQL 8 database. Vercel doesn't host MySQL; use something like TiDB Cloud, PlanetScale, Aiven, AWS RDS or Railway.
+2. Push the repo to GitHub, then in Vercel choose **Add New → Project** and import it. Leave the root directory as the repo root; `vercel.json` sets the build.
+3. Add environment variables:
 
-Both pin Node 24 through `engines` in `package.json`.
+| Name | Value |
+| --- | --- |
+| `DATABASE_URL` | `mysql://user:pass@host:port/db?ssl=true` |
+| `JWT_SECRET` | 32+ random characters, e.g. `openssl rand -base64 48` |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | first system admin; remove after the first deploy |
+| `NEXT_PUBLIC_TIME_ZONE` | optional, defaults to `Africa/Lagos` |
 
-**Migrations run during every API deployment.** `apps/api/vercel.json` uses `npm run vercel-build`, which runs:
+4. Deploy, then sign in with the seeded admin.
+
+**Migrations run during every production deployment.** The build command is `npm run vercel-build`, which runs:
 
 ```
 artisan migrate --force --seed --deploy && next build
@@ -101,17 +112,17 @@ artisan migrate --force --seed --deploy && next build
 - Knex's migration lock prevents two concurrent deploys from migrating at the same time.
 - A failed migration fails the build, so broken code is never promoted.
 - Preview deployments skip migrations, so a PR branch can't change the production database. To migrate a preview, give it its own `DATABASE_URL` and set `MIGRATE_ON_PREVIEW=true`.
-- The admin seeder only creates the system admin when `SEED_ADMIN_*` is set and that user doesn't exist yet. Remove those env vars after the first deploy.
+- The admin seeder only creates the system admin when `SEED_ADMIN_*` is set and that user doesn't exist yet.
 - `SKIP_MIGRATIONS=true` disables deploy-time migrations entirely.
 
-Vercel does not host MySQL. Use a managed MySQL service such as PlanetScale, Aiven, TiDB Cloud, AWS RDS or Railway. The connection pool is deliberately small (`DB_POOL_MAX`, default 5) for serverless.
+Node 24 is pinned through `engines` in `package.json`. The database pool is deliberately small (`DB_POOL_MAX`, default 5) for serverless.
 
 ## API overview
 
 All responses are `{ data }` or `{ error: { message, details? } }`. Amounts are integers in minor units (kobo or cents).
 
 ```
-POST   /api/auth/login                     GET  /api/auth/me           PUT /api/auth/password
+POST   /api/auth/login    POST /api/auth/logout    GET /api/auth/me    PUT /api/auth/password
 GET    /api/estates                        POST /api/estates (sysadmin)
 GET    /api/estates/:eid                   PATCH, DELETE (sysadmin)
 GET    /api/estates/:eid/dashboard
@@ -128,5 +139,3 @@ GET|POST          /api/estates/:eid/dues             PATCH|DELETE /dues/:did   P
 GET|POST          /api/estates/:eid/account          DELETE /account/:tid
 GET|POST          /api/users (sysadmin)              PATCH /users/:uid
 ```
-
-> Ports clash? `WEB_PORT=3001 API_PORT=4001 npm run up`.

@@ -1,15 +1,44 @@
 {
   "name": "emas",
   "private": true,
-  "description": "Estate Management System — Next.js API + Nuxt (Vue SSR) web",
-  "engines": { "node": ">=24 <25" },
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
-    "up": "docker compose up -d --build",
-    "down": "docker compose down",
-    "logs": "docker compose logs -f api web",
-    "migrate": "docker compose exec api npm run migrate",
-    "migrate:rollback": "docker compose exec api npm run migrate:rollback",
-    "migrate:fresh": "docker compose exec api npm run migrate:fresh",
-    "seed": "docker compose exec api npm run db:seed"
-  }
+    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit",
+    "vercel-build": "node scripts/artisan.mjs migrate --force --seed --deploy && next build",
+    "migrate": "node scripts/artisan.mjs migrate",
+    "migrate:rollback": "node scripts/artisan.mjs migrate:rollback",
+    "migrate:fresh": "node scripts/artisan.mjs migrate:fresh",
+    "migrate:status": "node scripts/artisan.mjs migrate:status",
+    "make:migration": "node scripts/artisan.mjs make:migration",
+    "db:seed": "node scripts/artisan.mjs db:seed",
+    "smoke": "node scripts/smoke.mjs",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
+    "docker:migrate": "docker compose exec app npm run migrate",
+    "docker:seed": "docker compose exec app npm run db:seed",
+    "docker:smoke": "docker compose exec app npm run smoke"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.14",
+    "knex": "^3.3.0",
+    "mysql2": "^3.24.6",
+    "next": "^16.2.11",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "typescript": "~5.9.3"
+  },
+  "description": "Estate Management System \u2014 Next.js (React UI + API) on MySQL"
 }

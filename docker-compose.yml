@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 30
 
-  api:
+  app:
     image: node:24-alpine
     working_dir: /app
     command: sh -c "npm install && npm run migrate && npm run dev"
@@ -27,30 +27,15 @@ services:
       SEED_ADMIN_PASSWORD: password
       WATCHPACK_POLLING: "true"
     ports:
-      - "${API_PORT:-4000}:4000"
+      - "${APP_PORT:-3000}:3000"
     volumes:
-      - ./apps/api:/app
-      - api-node-modules:/app/node_modules
+      - .:/app
+      - node-modules:/app/node_modules
     depends_on:
       mysql:
         condition: service_healthy
 
-  web:
-    image: node:24-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
-    environment:
-      NUXT_API_URL: http://api:4000
-      CHOKIDAR_USEPOLLING: "true"
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    volumes:
-      - ./apps/web:/app
-      - web-node-modules:/app/node_modules
-    depends_on:
-      - api
-
 volumes:
   mysql-data:
-  api-node-modules:
-  web-node-modules:
+  node-modules:
+    name: emas_api-node-modules # reuses the dependency cache from the earlier two-app setup

@@ -17,3 +17,14 @@
 - [x] 15. Web: Members, roles & permissions pages; system admin (estates, users)
 - [x] 16. Verified in Docker (node:24-alpine + mysql:8.0): migrations on start, seed, 34/34 API smoke checks, all web pages SSR 200 via cookie session; also both prod builds
 - [x] 17. Vercel config (migrations on deploy) + README
+
+## Phase 2 — single Next.js project (React UI replaces Nuxt)
+
+- [x] 18. API accepts httpOnly session cookie (+ CSRF origin check), login sets / logout clears it
+- [x] 19. Server data loader (calls route handlers in-process), session/estate helpers, client fetch helpers
+- [x] 20. Root layout, global CSS, login, app shell (topbar + estate switcher), estate sidebar
+- [x] 21. Pages: estates list, profile, admin users, new estate
+- [x] 22. Pages: estate dashboard, residences list, residence detail (overview / inbox / account)
+- [x] 23. Pages: announcements, dues, estate account, members, roles, settings
+- [x] 24. Move app to repo root, single docker-compose service, single vercel.json, remove apps/web
+- [x] 25. Verified: typecheck, prod build, 34/34 smoke (Docker + prod), all pages SSR, 12/12 headless-Chrome UI flows (no hydration errors); README updated
