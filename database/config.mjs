@@ -6,6 +6,11 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 
 export function connectionFromEnv(env = process.env) {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set')
+  // A raw '#', '?' or '/' in the password ends the host part early, so the user name gets parsed as the host.
+  const credentials = env.DATABASE_URL.match(/^[a-z0-9+]+:\/\/(.*)@/i)?.[1] ?? ''
+  if (/[#?/]/.test(credentials)) {
+    throw new Error("DATABASE_URL credentials contain '#', '?' or '/'. URL-encode the password (encodeURIComponent).")
+  }
   const url = new URL(env.DATABASE_URL)
   const ssl = url.searchParams.get('ssl')
   return {
